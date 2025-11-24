@@ -18,7 +18,7 @@
     justify-content: space-between;
     gap: 20px;
     width: 100%;
-    max-width: 1600px;
+    max-width: 1800px;
     margin: auto;
   }
 
@@ -30,17 +30,15 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    height: 700px;
+    height: 780px;
   }
 
-  /* 3×2 control grid */
   .control-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 12px;
   }
 
-  /* 3×2 wavelength grid */
   .wavelength-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -62,7 +60,6 @@
     justify-content: center;
     gap: 10px;
   }
-
   .left-column button:hover {
     background: #1e40af;
   }
@@ -79,7 +76,6 @@
     padding: 20px;
     font-size: 20px;
     border-radius: 12px;
-    white-space: pre-wrap;
   }
 
   table {
@@ -101,6 +97,12 @@
     border-radius: 12px;
   }
 
+  #chart {
+    width: 100%;
+    height: 100%;
+    border-radius: 16px;
+  }
+
   input[type="text"] {
     width: 100%;
     font-size: 22px;
@@ -120,58 +122,39 @@
   <div class="column left-column">
     <h2 style="text-align:center;">Controls</h2>
 
-    <!-- CONTROL GRID (IMPORT + RESERVED REMOVED) -->
     <div class="control-grid">
       <button id="connectBtn">Connect</button>
       <button onclick="confirmCalibration()">Calibrate</button>
       <button onclick="exportCSV()">Export</button>
 
       <button onclick="clearTableConfirm()">Clear Data</button>
-      <div></div>
+      <button onclick="startSweep()">Sweep</button>
       <div></div>
     </div>
 
-    <!-- TEST NAME -->
     <input id="testName" type="text" placeholder="Enter trial name…">
 
     <h3 style="text-align:center;">Read Wavelength</h3>
 
-    <!-- WAVELENGTH GRID (3×2) -->
     <div class="wavelength-grid">
-
-      <button onclick="sendCommand('READ_665')">
-        <div class="color-box" style="background:#ff0000;"></div>665 nm
-      </button>
-
-      <button onclick="sendCommand('READ_630')">
-        <div class="color-box" style="background:#ff6600;"></div>630 nm
-      </button>
-
-      <button onclick="sendCommand('READ_600')">
-        <div class="color-box" style="background:#ffcc00;"></div>600 nm
-      </button>
-
-      <button onclick="sendCommand('READ_550')">
-        <div class="color-box" style="background:#00cc44;"></div>550 nm
-      </button>
-
-      <button onclick="sendCommand('READ_470')">
-        <div class="color-box" style="background:#0066ff;"></div>470 nm
-      </button>
-
-      <button onclick="sendCommand('READ_400')">
-        <div class="color-box" style="background:#6633cc;"></div>400 nm
-      </button>
-
+      <button onclick="manualRead(665)"><div class="color-box" style="background:#ff0000;"></div>665 nm</button>
+      <button onclick="manualRead(630)"><div class="color-box" style="background:#ff6600;"></div>630 nm</button>
+      <button onclick="manualRead(600)"><div class="color-box" style="background:#ffcc00;"></div>600 nm</button>
+      <button onclick="manualRead(550)"><div class="color-box" style="background:#00cc44;"></div>550 nm</button>
+      <button onclick="manualRead(470)"><div class="color-box" style="background:#0066ff;"></div>470 nm</button>
+      <button onclick="manualRead(400)"><div class="color-box" style="background:#6633cc;"></div>400 nm</button>
     </div>
-  </div>
 
-  <!-- CENTER COLUMN -->
-  <div class="column">
-    <h2 style="text-align:center;">Status</h2>
+    <h3>Status</h3>
     <div class="scroll-area">
       <pre id="output"></pre>
     </div>
+  </div>
+
+  <!-- CENTER COLUMN: CHART -->
+  <div class="column">
+    <h2 style="text-align:center;">Spectrum</h2>
+    <canvas id="chart"></canvas>
   </div>
 
   <!-- RIGHT COLUMN -->
@@ -194,11 +177,14 @@
 </div>
 
 <script>
-let port;
-let reader;
-let writer;
+let port, reader, writer;
 
-// wavelength → colour
+/* Sweep data: only the latest sweep */
+let latestSweep = [];
+let isSweeping = false;
+
+const sweepOrder = [400, 470, 550, 600, 630, 665];
+
 const colourMap = {
   665: "#ff0000",
   630: "#ff6600",
@@ -208,21 +194,22 @@ const colourMap = {
   400: "#6633cc"
 };
 
-// confirm calibration
+/* ===================== Confirm windows =========================== */
+
 function confirmCalibration() {
-  if (confirm("Start calibration? Ensure cuvette is inserted and light sealed.")) {
+  if (confirm("Start calibration? Ensure cuvette is inserted and sealed.")) {
     sendCommand("CALIBRATE");
   }
 }
 
-// confirm clear
 function clearTableConfirm() {
-  if (confirm("Clear all recorded absorbance data?")) {
+  if (confirm("Clear ALL recorded absorbance data?")) {
     clearTable();
   }
 }
 
-// connect
+/* ======================= Serial setup ============================ */
+
 async function connectSerial() {
   port = await navigator.serial.requestPort();
   await port.open({ baudRate: 9600 });
@@ -232,6 +219,30 @@ async function connectSerial() {
 
   readLoop();
 }
+document.getElementById("connectBtn").addEventListener("click", connectSerial);
+
+/* Manual wavelength read */
+function manualRead(wl) {
+  sendCommand("READ_" + wl);
+}
+
+/* ========================== Sweep ================================= */
+
+async function startSweep() {
+  isSweeping = true;
+  latestSweep = [];    // CLEAR CHART
+  drawChart();
+
+  for (let wl of sweepOrder) {
+    sendCommand("READ_" + wl);
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  isSweeping = false;
+  drawChart();
+}
+
+/* ======================= Serial parsing ============================ */
 
 async function readLoop() {
   let buffer = "";
@@ -253,58 +264,140 @@ async function readLoop() {
 
       if (line.includes(",") && !isNaN(line.split(",")[0])) {
         const [wl, abs] = line.split(",");
+
         addRow(wl, abs);
+
+        // ONLY add to sweep if sweep is active
+        if (isSweeping && sweepOrder.includes(Number(wl))) {
+          latestSweep.push({ wl: Number(wl), abs: Number(abs) });
+          drawChart();
+        }
       }
     }
   }
 }
 
-// add row
+/* ====================== Table handling ============================= */
+
 function addRow(wavelength, absorbance) {
   const tbody = document.getElementById("absTable").querySelector("tbody");
-  const row = document.createElement("tr");
-
   const colour = colourMap[wavelength] || "#000";
 
+  const row = document.createElement("tr");
   row.innerHTML = `
     <td><div class="color-box" style="background:${colour}; margin:auto;"></div></td>
     <td>${wavelength}</td>
     <td>${absorbance}</td>
   `;
-
   tbody.insertBefore(row, tbody.firstChild);
 }
 
-// send command
+function clearTable() {
+  latestSweep = [];
+  isSweeping = false;
+  document.getElementById("absTable").querySelector("tbody").innerHTML = "";
+  drawChart();
+}
+
+/* ========================= Send commands =========================== */
+
 async function sendCommand(cmd) {
   if (!writer) return;
   await writer.write(new TextEncoder().encode(cmd + "\n"));
 }
 
-document.getElementById("connectBtn").addEventListener("click", connectSerial);
+/* ========================== Spectrum chart ========================= */
 
-// export csv
-function exportCSV() {
-  const name = document.getElementById("testName").value || "AbsorbanceTest";
-  const rows = [["Wavelength","Absorbance"]];
+function drawChart() {
+  const canvas = document.getElementById("chart");
+  const ctx = canvas.getContext("2d");
 
-  const tbody = document.getElementById("absTable").querySelector("tbody");
-  for (let r of tbody.rows) {
-    rows.push([r.cells[1].innerText, r.cells[2].innerText]);
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+
+  const w = canvas.width;
+  const h = canvas.height;
+
+  /* ===== rainbow background ===== */
+  const grad = ctx.createLinearGradient(0, 0, w, 0);
+  grad.addColorStop(0.00, "#6633cc");
+  grad.addColorStop(0.20, "#0066ff");
+  grad.addColorStop(0.45, "#00cc44");
+  grad.addColorStop(0.70, "#ffcc00");
+  grad.addColorStop(0.90, "#ff6600");
+  grad.addColorStop(1.00, "#ff0000");
+
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  if (latestSweep.length === 0) return;
+
+  const minAbs = Math.min(...latestSweep.map(p => p.abs));
+  const maxAbs = Math.max(...latestSweep.map(p => p.abs));
+  const span = maxAbs - minAbs || 1;
+
+  const yMin = minAbs - span * 0.10;
+  const yMax = maxAbs + span * 0.10;
+
+  const pts = [...latestSweep]
+    .sort((a, b) => a.wl - b.wl)
+    .map(p => ({
+      x: ((p.wl - 400) / (665 - 400)) * w,
+      y: h - ((p.abs - yMin) / (yMax - yMin)) * h
+    }));
+
+  if (pts.length < 2) return;
+
+  function CRtoBez(p0, p1, p2, p3) {
+    return [
+      p1.x + (p2.x - p0.x) / 6,
+      p1.y + (p2.y - p0.y) / 6,
+      p2.x - (p3.x - p1.x) / 6,
+      p2.y - (p3.y - p1.y) / 6
+    ];
   }
 
-  let csv = rows.map(r => r.join(",")).join("\n");
-  let blob = new Blob([csv], { type: "text/csv" });
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = "#000";
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
 
-  let link = document.createElement("a");
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+
+    const [cx1, cy1, cx2, cy2] = CRtoBez(p0, p1, p2, p3);
+    ctx.bezierCurveTo(cx1, cy1, cx2, cy2, p2.x, p2.y);
+  }
+  ctx.stroke();
+
+  ctx.fillStyle = "#000";
+  for (const pt of pts) {
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/* ========================= Export to CSV ========================== */
+
+function exportCSV() {
+  const name = document.getElementById("testName").value || "AbsorbanceTest";
+  const rows = [["Wavelength", "Absorbance"]];
+
+  const tbody = document.getElementById("absTable").querySelector("tbody");
+  for (let r of tbody.rows)
+    rows.push([r.cells[1].innerText, r.cells[2].innerText]);
+
+  const csv = rows.map(r => r.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+
+  const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = name + ".csv";
   link.click();
-}
-
-// clear table
-function clearTable() {
-  document.getElementById("absTable").querySelector("tbody").innerHTML = "";
 }
 </script>
 
