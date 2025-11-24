@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Absorbance Controller</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+  body {
+    font-family: Helvetica;
+    background: #f5f7fb;
+    margin: 0;
+    padding: 40px;
+  }
+
+  .layout {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    width: 100%;
+    max-width: 1600px;
+    margin: auto;
+  }
+
+  .column {
+    background: white;
+    padding: 25px;
+    border-radius: 16px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 700px;
+  }
+
+  /* 3×2 control grid */
+  .control-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  /* 3×2 wavelength grid */
+  .wavelength-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 15px;
+  }
+
+  .left-column button {
+    font-size: 24px;
+    width: 100%;
+    padding: 15px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .left-column button:hover {
+    background: #1e40af;
+  }
+
+  .color-box {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    border: 1px solid #999;
+  }
+
+  pre {
+    background: #eee;
+    padding: 20px;
+    font-size: 20px;
+    border-radius: 12px;
+    white-space: pre-wrap;
+  }
+
+  table {
+    width: 100%;
+    font-size: 22px;
+    border-collapse: collapse;
+  }
+
+  th, td {
+    padding: 10px;
+    border-bottom: 1px solid #ccc;
+    text-align: center;
+  }
+
+  .scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    margin-top: 10px;
+    border-radius: 12px;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    font-size: 22px;
+    padding: 10px;
+    margin: 20px 0;
+    border-radius: 10px;
+    border: 2px solid #ccc;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="layout">
+
+  <!-- LEFT COLUMN -->
+  <div class="column left-column">
+    <h2 style="text-align:center;">Controls</h2>
+
+    <!-- CONTROL GRID (IMPORT + RESERVED REMOVED) -->
+    <div class="control-grid">
+      <button id="connectBtn">Connect</button>
+      <button onclick="confirmCalibration()">Calibrate</button>
+      <button onclick="exportCSV()">Export</button>
+
+      <button onclick="clearTableConfirm()">Clear Data</button>
+      <div></div>
+      <div></div>
+    </div>
+
+    <!-- TEST NAME -->
+    <input id="testName" type="text" placeholder="Enter trial name…">
+
+    <h3 style="text-align:center;">Read Wavelength</h3>
+
+    <!-- WAVELENGTH GRID (3×2) -->
+    <div class="wavelength-grid">
+
+      <button onclick="sendCommand('READ_665')">
+        <div class="color-box" style="background:#ff0000;"></div>665 nm
+      </button>
+
+      <button onclick="sendCommand('READ_630')">
+        <div class="color-box" style="background:#ff6600;"></div>630 nm
+      </button>
+
+      <button onclick="sendCommand('READ_600')">
+        <div class="color-box" style="background:#ffcc00;"></div>600 nm
+      </button>
+
+      <button onclick="sendCommand('READ_550')">
+        <div class="color-box" style="background:#00cc44;"></div>550 nm
+      </button>
+
+      <button onclick="sendCommand('READ_470')">
+        <div class="color-box" style="background:#0066ff;"></div>470 nm
+      </button>
+
+      <button onclick="sendCommand('READ_400')">
+        <div class="color-box" style="background:#6633cc;"></div>400 nm
+      </button>
+
+    </div>
+  </div>
+
+  <!-- CENTER COLUMN -->
+  <div class="column">
+    <h2 style="text-align:center;">Status</h2>
+    <div class="scroll-area">
+      <pre id="output"></pre>
+    </div>
+  </div>
+
+  <!-- RIGHT COLUMN -->
+  <div class="column">
+    <h2 style="text-align:center;">Absorbance Table</h2>
+    <div class="scroll-area">
+      <table id="absTable">
+        <thead>
+          <tr>
+            <th>Colour</th>
+            <th>Wavelength (nm)</th>
+            <th>Absorbance</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let port;
+let reader;
+let writer;
+
+// wavelength → colour
+const colourMap = {
+  665: "#ff0000",
+  630: "#ff6600",
+  600: "#ffcc00",
+  550: "#00cc44",
+  470: "#0066ff",
+  400: "#6633cc"
+};
+
+// confirm calibration
+function confirmCalibration() {
+  if (confirm("Start calibration? Ensure cuvette is inserted and light sealed.")) {
+    sendCommand("CALIBRATE");
+  }
+}
+
+// confirm clear
+function clearTableConfirm() {
+  if (confirm("Clear all recorded absorbance data?")) {
+    clearTable();
+  }
+}
+
+// connect
+async function connectSerial() {
+  port = await navigator.serial.requestPort();
+  await port.open({ baudRate: 9600 });
+
+  writer = port.writable.getWriter();
+  reader = port.readable.pipeThrough(new TextDecoderStream()).getReader();
+
+  readLoop();
+}
+
+async function readLoop() {
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += value;
+    let lines = buffer.split("\n");
+    buffer = lines.pop();
+
+    for (let line of lines) {
+      line = line.trim();
+      document.getElementById("output").textContent += line + "\n";
+
+      if (line.startsWith("CAL_")) continue;
+      if (line === "DONE") continue;
+
+      if (line.includes(",") && !isNaN(line.split(",")[0])) {
+        const [wl, abs] = line.split(",");
+        addRow(wl, abs);
+      }
+    }
+  }
+}
+
+// add row
+function addRow(wavelength, absorbance) {
+  const tbody = document.getElementById("absTable").querySelector("tbody");
+  const row = document.createElement("tr");
+
+  const colour = colourMap[wavelength] || "#000";
+
+  row.innerHTML = `
+    <td><div class="color-box" style="background:${colour}; margin:auto;"></div></td>
+    <td>${wavelength}</td>
+    <td>${absorbance}</td>
+  `;
+
+  tbody.insertBefore(row, tbody.firstChild);
+}
+
+// send command
+async function sendCommand(cmd) {
+  if (!writer) return;
+  await writer.write(new TextEncoder().encode(cmd + "\n"));
+}
+
+document.getElementById("connectBtn").addEventListener("click", connectSerial);
+
+// export csv
+function exportCSV() {
+  const name = document.getElementById("testName").value || "AbsorbanceTest";
+  const rows = [["Wavelength","Absorbance"]];
+
+  const tbody = document.getElementById("absTable").querySelector("tbody");
+  for (let r of tbody.rows) {
+    rows.push([r.cells[1].innerText, r.cells[2].innerText]);
+  }
+
+  let csv = rows.map(r => r.join(",")).join("\n");
+  let blob = new Blob([csv], { type: "text/csv" });
+
+  let link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = name + ".csv";
+  link.click();
+}
+
+// clear table
+function clearTable() {
+  document.getElementById("absTable").querySelector("tbody").innerHTML = "";
+}
+</script>
+
+</body>
+</html>
