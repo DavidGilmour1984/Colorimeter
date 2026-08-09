@@ -103,8 +103,10 @@ bands line up with the true wavelength positions on the x-axis (400–665 nm).
 ## Operating procedure
 
 1. Plug in over USB and click **Connect**.
-2. Insert the blank cuvette, close the lid, and click **Calibrate**. Wait for
-   calibration to finish.
+2. Stand the device on a flat surface. Insert the blank cuvette, and completely
+   cover the top of the cuvette with the palm of your hand so no light enters the
+   chamber. Click **Calibrate** and keep your palm in place until calibration
+   finishes.
 3. Swap in the sample cuvette and close the lid.
 4. Click a wavelength button for a single reading, or **Sweep** for the full
    spectrum.
@@ -112,6 +114,9 @@ bands line up with the true wavelength positions on the x-axis (400–665 nm).
 
 ## Notes
 
+- During calibration, keep the device flat and the cuvette top fully covered by
+  your palm so no light leaks into the chamber — the blank must be a true
+  dark/full-path reference.
 - Keep the lid closed during readings; stray room light adds to the LDR signal.
 - Recalibrate whenever the solvent, cuvette type, or ambient lighting changes.
 - Readings near 0 or 1023 counts mean the LDR is near the ends of its range —
