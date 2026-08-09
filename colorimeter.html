@@ -164,8 +164,9 @@
     <div class="modal-body">
       <ol>
         <li><b>Connect.</b> Plug the colorimeter into a USB port, click <b>Connect</b>, and choose the device in the pop-up. The chip at the top right turns green when it's connected.</li>
-        <li><b>Prepare the blank.</b> Fill a clean cuvette with your blank solution (solvent only — no sample), wipe the outside, and place it in the holder. Close the lid so no room light gets in.</li>
-        <li><b>Calibrate.</b> Click <b>Calibrate</b> and confirm. Each LED lights in turn while the device records the blank. Wait for calibration to finish before reading a sample.</li>
+        <li><b>Prepare the blank.</b> Fill a clean cuvette with your blank solution (solvent only — no sample), wipe the outside, and place it in the holder.</li>
+        <li><b>Block all light.</b> Stand the device on a flat surface and completely cover the top of the cuvette with the palm of your hand so no light enters the chamber. Keep it covered throughout calibration.</li>
+        <li><b>Calibrate.</b> Click <b>Calibrate</b> and confirm. Each LED lights in turn while the device records the blank. Hold your palm over the cuvette until calibration finishes.</li>
         <li><b>Load your sample.</b> Swap in the cuvette holding the solution you want to measure. Close the lid again.</li>
         <li><b>Read.</b> Click a single <b>wavelength</b> button to measure one colour, or click <b>Sweep</b> to measure all six in order and plot the spectrum.</li>
         <li><b>Record.</b> Enter a trial name, then click <b>Export</b> to save the table as a CSV. Use <b>Clear Data</b> to start a fresh set of readings.</li>
@@ -207,7 +208,7 @@ document.addEventListener("keydown", e => {
 /* ===================== Confirm windows =========================== */
 
 function confirmCalibration() {
-  if (confirm("Start calibration? Ensure cuvette is inserted and sealed.")) {
+  if (confirm("Start calibration?\n\nPlace the device on a flat surface, insert the cuvette, and completely cover the top of the cuvette with the palm of your hand so no light enters the chamber. Hold it covered until calibration finishes.")) {
     sendCommand("CALIBRATE");
   }
 }
